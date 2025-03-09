@@ -1,2 +1,6 @@
+# IDE
 .vscode/
 .history/
+
+# output
+tracer.html
