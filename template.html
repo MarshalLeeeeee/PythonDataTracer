@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -63,7 +64,7 @@
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const data = {'func_data': {'g': {'fn_fln': 262, 'children_infos': [['g1', 2], ['g2', 3]], 'return_v': 16, 'call_v': 10, 'total_lines': 4}, 'g2': {'fn_fln': 271, 'total_lines': 1, 'call_v': 13, 'return_v': 13}, 'g1': {'fn_fln': 268, 'total_lines': 1, 'call_v': 12, 'return_v': 13}, 'f': {'fn_fln': 253, 'children_infos': [['g', 2], ['h', 6]], 'return_v': 13, 'call_v': 0, 'total_lines': 11}, 'h': {'fn_fln': 274, 'children_infos': [['t1', 2]], 'return_v': 18, 'call_v': 16, 'total_lines': 4}, 't2': {'fn_fln': 250, 'total_lines': 1, 'call_v': 21, 'return_v': 17}, 't1': {'fn_fln': 245, 'children_infos': [['t2', 2]], 'return_v': 18, 'call_v': 20, 'total_lines': 3}}, 'root': 'f'};
+            const data = {'root': 'f', 'func_data': {'f': {'data': {'v': {'call': 0, 'return': 13}}, 'fn_fln': 477, 'children_infos': [['g', 2], ['h', 6]], 'total_lines': 11}, 'g': {'data': {'v': {'call': 10, 'return': 16}}, 'fn_fln': 486, 'children_infos': [['g1', 2], ['g2', 3]], 'total_lines': 4}, 'g1': {'data': {'v': {'call': 12, 'return': 13}}, 'fn_fln': 492, 'total_lines': 1}, 'g2': {'data': {'v': {'call': 13, 'return': 13}}, 'fn_fln': 495, 'total_lines': 1}, 'h': {'data': {'v': {'call': 16, 'return': 18}}, 'fn_fln': 498, 'children_infos': [['t1', 2]], 'total_lines': 4}, 't1': {'data': {'v': {'call': 20, 'return': 18}}, 'fn_fln': 464, 'children_infos': [['t2', 2]], 'total_lines': 3}, 't2': {'data': {'v': {'call': 21, 'return': 17}}, 'fn_fln': 469, 'total_lines': 1}}}
             const rootNode = data.func_data[data.root];
 
             const rects = [];
@@ -137,9 +138,9 @@
                     const popup = document.createElement('div');
                     popup.className = 'secondary-popup';
                     popup.innerHTML = `
-                        <h3>Detail</h3>
-                        <p>Before: ${nodeInfo.call_v}</p>
-                        <p>After: ${nodeInfo.return_v}</p>
+                        <h3>Detail(TODO)</h3>
+                        <p>Before: ${nodeInfo.data.v.call}</p>
+                        <p>After: ${nodeInfo.data.v.return}</p>
                     `;
                     createPopup(popup, rect, transformContainer);
                 });
@@ -274,3 +275,4 @@
         </script>
 </body>
 </html>
+

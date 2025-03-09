@@ -1,8 +1,39 @@
 import sys
 import inspect
 
+'''
+record data of interest in the beginning and end of a frame
+
+{
+    'func_name': {
+        'data': {
+            'v1': {
+                'call': v1_1,
+                'return': v1_2,
+            },
+            'v2': {
+                'call': v2_1,
+                'return': v2_2,
+            },
+        }
+        'fn_fln': line of function definition,
+        'call_ln': line of event,
+        'return_ln': line of event,
+        'children': List of direct child func
+        'children_ln': List of line of direct child func
+    }
+}
+'''
 trace_data = {}
+'''
+the instance of interest that contains data of interest
+'''
 trace_obj = None
+'''
+get data of interest from trace_obj with signature as follows
+getter() -> Dict{'variable_name': value, ...}
+'''
+trace_getter = None # get data of interest from trace_obj, returns Dict
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -144,9 +175,9 @@ HTML_TEMPLATE = '''
                     const popup = document.createElement('div');
                     popup.className = 'secondary-popup';
                     popup.innerHTML = `
-                        <h3>Detail</h3>
-                        <p>Before: ${nodeInfo.call_v}</p>
-                        <p>After: ${nodeInfo.return_v}</p>
+                        <h3>Detail(TODO)</h3>
+                        <p>Before: ${nodeInfo.data.v.call}</p>
+                        <p>After: ${nodeInfo.data.v.return}</p>
                     `;
                     createPopup(popup, rect, transformContainer);
                 });
@@ -285,15 +316,26 @@ HTML_TEMPLATE = '''
 '''
 
 def _update_data(event, frame):
+    '''
+    set data of interest into trace_data
+    '''
+    global trace_data
     fn = frame.f_code.co_name
     if fn == 'end_trace' or fn == 'start_trace' or fn == '_update_data':
         return
-    global trace_data
+    if fn == trace_getter.__name__:
+        return
     if fn not in trace_data:
         trace_data[fn] = {}
     fn_fln = frame.f_code.co_firstlineno
     fn_ln = frame.f_lineno
-    trace_data[fn][event+'_v'] = trace_obj.v
+    if 'data' not in trace_data[fn]:
+        trace_data[fn]['data'] = {}
+    trace_obj_data = trace_getter()
+    for k, v in trace_obj_data.items():
+        if k not in trace_data[fn]['data']:
+            trace_data[fn]['data'][k] = {}
+        trace_data[fn]['data'][k][event] = v
     trace_data[fn][event+'_ln'] = fn_ln # exec line
     trace_data[fn]['fn_fln'] = fn_fln # func line
     fb = frame.f_back
@@ -311,6 +353,9 @@ def _update_data(event, frame):
             trace_data[fb_fn]['children_ln'].append(fb_ln)
 
 def _trace_calls(frame, event, arg):
+    '''
+    callback feed to settrace
+    '''
     global trace_data
     if event == 'call':
         _update_data('call', frame)
@@ -319,12 +364,16 @@ def _trace_calls(frame, event, arg):
     return _trace_calls
 
 def _process_data():
+    '''
+    post process trace_data
+    parse data into html format with js script
+    '''
     global trace_data
     invalid_ks = []
     cs = set()
-    root = None
-    for k,v in trace_data.items():
-        if 'call_v' not in v:
+    root = None # root of the callstack
+    for k, v in trace_data.items():
+        if not v.get('data', {}):
             invalid_ks.append(k)
         else:
             for c in v.get('children', ()):
@@ -337,6 +386,9 @@ def _process_data():
             break
 
     def calc_func_len(node):
+        '''
+        recursively unfold child func to calc the total number of lines of execution
+        '''
         if node not in trace_data:
             return 0
         d = trace_data[node]
@@ -377,26 +429,36 @@ def _process_data():
     with open(filename, 'w') as f:
         f.write(html)
 
-def start_trace(t):
+def start_trace(t, getter):
+    '''
+    start trace of data of interest
+    insert at the beginning of the region of interest
+    '''
     global trace_data
     global trace_obj
+    global trace_getter
     trace_data = {}
     trace_obj = t
+    trace_getter = getter
     f = inspect.currentframe()
     sys.settrace(_trace_calls)
     _update_data('call', f.f_back)
 
 def end_trace():
+    '''
+    end trace of data of interest
+    insert at the end of the region of interest
+    '''
     global trace_data
     global trace_obj
+    global trace_getter
     sys.settrace(None)
     f = inspect.currentframe()
     _update_data('return', f.f_back)
     _process_data()
-    for k,v in trace_data.items():
-        print(k, v)
     trace_data = {}
     trace_obj = None
+    trace_getter = None
 
 if __name__ == '__main__':
 
@@ -412,9 +474,14 @@ if __name__ == '__main__':
         def t2(self):
             self.v -= 4
 
+        def dump(self):
+            return {
+                'v': self.v,
+            }
+
     def f():
         t = T()
-        start_trace(t)
+        start_trace(t, t.dump)
         t.v += 10
         g(t)
         h(t)
