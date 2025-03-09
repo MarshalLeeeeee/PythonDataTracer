@@ -1,7 +1,7 @@
 import sys
 import inspect
 
-data = {}
+trace_data = {}
 trace_obj = None
 
 HTML_TEMPLATE = '''
@@ -284,94 +284,72 @@ HTML_TEMPLATE = '''
 
 '''
 
-def update_data(event, frame):
+def _update_data(event, frame):
     fn = frame.f_code.co_name
-    if fn == 'end_trace' or fn == 'start_trace' or fn == 'update_data':
+    if fn == 'end_trace' or fn == 'start_trace' or fn == '_update_data':
         return
-    global data
-    if fn not in data:
-        data[fn] = {}
+    global trace_data
+    if fn not in trace_data:
+        trace_data[fn] = {}
     fn_fln = frame.f_code.co_firstlineno
     fn_ln = frame.f_lineno
-    data[fn][event+'_v'] = trace_obj.v
-    data[fn][event+'_ln'] = fn_ln # exec line
-    data[fn]['fn_fln'] = fn_fln # func line
+    trace_data[fn][event+'_v'] = trace_obj.v
+    trace_data[fn][event+'_ln'] = fn_ln # exec line
+    trace_data[fn]['fn_fln'] = fn_fln # func line
     fb = frame.f_back
     if fb:
         fb_fn = fb.f_code.co_name
-        if fb_fn not in data:
-            data[fb_fn] = {}
-        if 'children' not in data[fb_fn]:
-            data[fb_fn]['children'] = []
-        if 'children_ln' not in data[fb_fn]:
-            data[fb_fn]['children_ln'] = []
-        if fn not in data[fb_fn]['children']:
+        if fb_fn not in trace_data:
+            trace_data[fb_fn] = {}
+        if 'children' not in trace_data[fb_fn]:
+            trace_data[fb_fn]['children'] = []
+        if 'children_ln' not in trace_data[fb_fn]:
+            trace_data[fb_fn]['children_ln'] = []
+        if fn not in trace_data[fb_fn]['children']:
             fb_ln = fb.f_lineno
-            data[fb_fn]['children'].append(fn)
-            data[fb_fn]['children_ln'].append(fb_ln)
+            trace_data[fb_fn]['children'].append(fn)
+            trace_data[fb_fn]['children_ln'].append(fb_ln)
 
-def trace_calls(frame, event, arg):
-    global data
+def _trace_calls(frame, event, arg):
+    global trace_data
     if event == 'call':
-        update_data('call', frame)
+        _update_data('call', frame)
     elif event == 'return':
-        update_data('return', frame)
-    return trace_calls
+        _update_data('return', frame)
+    return _trace_calls
 
-def start_trace(t):
-    global data
-    global trace_obj
-    data = {}
-    trace_obj = t
-    f = inspect.currentframe()
-    sys.settrace(trace_calls)
-    update_data('call', f.f_back)
-
-def end_trace():
-    global data
-    global trace_obj
-    sys.settrace(None)
-    f = inspect.currentframe()
-    update_data('return', f.f_back)
-    process_data()
-    for k,v in data.items():
-        print(k, v)
-    data = {}
-    trace_obj = None
-
-
-def process_data():
-    global data
+def _process_data():
+    global trace_data
     invalid_ks = []
     cs = set()
     root = None
-    for k,v in data.items():
+    for k,v in trace_data.items():
         if 'call_v' not in v:
             invalid_ks.append(k)
         else:
             for c in v.get('children', ()):
                 cs.add(c)
     for k in invalid_ks:
-        del data[k]
-    for k in data.keys():
+        del trace_data[k]
+    for k in trace_data.keys():
         if k not in cs:
             root = k
             break
 
     def calc_func_len(node):
-        if node not in data:
+        if node not in trace_data:
             return 0
-        d = data[node]
+        d = trace_data[node]
         children_infos = []
         for c, cl in zip(d.get('children', ()), d.get('children_ln', ())):
             children_infos.append([c, cl])
         if children_infos:
             children_infos.sort(key=lambda x: x[1])
-            data[node]['children_infos'] = children_infos
+            trace_data[node]['children_infos'] = children_infos
         if 'children' in d:
-            del data[node]['children']
+            del trace_data[node]['children']
         if 'children_ln' in d:
-            del data[node]['children_ln']
+            del trace_data[node]['children_ln']
 
         total_lines = d['return_ln'] - d['call_ln']
         new_lines = 0
@@ -380,16 +358,16 @@ def process_data():
             child_info[1] += new_lines
             new_lines += node_lines - 1
             total_lines += node_lines - 1
-        data[node]['total_lines'] = total_lines
+        trace_data[node]['total_lines'] = total_lines
         for child_info in children_infos:
             child_info[1] -= d['call_ln']
-        del data[node]['call_ln']
-        del data[node]['return_ln']
+        del trace_data[node]['call_ln']
+        del trace_data[node]['return_ln']
         return total_lines
     calc_func_len(root)
 
     func_data = {}
-    func_data.update(data)
+    func_data.update(trace_data)
     final_data = {
         'root': root,
         'func_data': func_data,
@@ -399,45 +377,68 @@ def process_data():
     with open(filename, 'w') as f:
         f.write(html)
 
-class T(object):
-    def __init__(self):
-        self.v = 0
+def start_trace(t):
+    global trace_data
+    global trace_obj
+    trace_data = {}
+    trace_obj = t
+    f = inspect.currentframe()
+    sys.settrace(_trace_calls)
+    _update_data('call', f.f_back)
 
-    def t1(self):
-        self.v += 1
-        self.t2()
-        self.v += 1
+def end_trace():
+    global trace_data
+    global trace_obj
+    sys.settrace(None)
+    f = inspect.currentframe()
+    _update_data('return', f.f_back)
+    _process_data()
+    for k,v in trace_data.items():
+        print(k, v)
+    trace_data = {}
+    trace_obj = None
 
-    def t2(self):
-        self.v -= 4
+if __name__ == '__main__':
 
-def f():
-    t = T()
-    start_trace(t)
-    t.v += 10
-    g(t)
-    h(t)
-    t.v -= 5
-    end_trace()
+    class T(object):
+        def __init__(self):
+            self.v = 0
 
-def g(t):
-    t.v += 2
-    g1(t)
-    g2()
-    t.v += 3
+        def t1(self):
+            self.v += 1
+            self.t2()
+            self.v += 1
 
-def g1(t):
-    t.v += 1
+        def t2(self):
+            self.v -= 4
 
-def g2():
-    pass
+    def f():
+        t = T()
+        start_trace(t)
+        t.v += 10
+        g(t)
+        h(t)
+        t.v -= 5
+        end_trace()
 
-def h(t):
-    t.v += 4
-    t.t1()
+    def g(t):
+        t.v += 2
+        g1(t)
+        g2()
+        t.v += 3
 
-def p():
-    print('Over...')
+    def g1(t):
+        t.v += 1
 
-f()
-p()
+    def g2():
+        pass
+
+    def h(t):
+        t.v += 4
+        t.t1()
+
+    def p():
+        print('Over...')
+
+    f()
+    p()
